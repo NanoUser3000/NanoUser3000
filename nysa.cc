@@ -93,7 +93,7 @@ GateType whatType(std::string line) {
  */
 void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error) {
 	GateType type = whatType(line);
-	switch (type) {
+	switch (type) {//! zamienić na if-else
 		case NULLGATE:
 		{
 			errorLine(lineNo, line);
@@ -148,7 +148,9 @@ int main(void) {
 	}
 
 	//obwód utworzony (jako zmienna circuit)
+	
 	if (error) {
+		//obwód błędny, koniec programu
 		std::cout << "error" << std::endl;//!//D
 		return 0;
 	}
