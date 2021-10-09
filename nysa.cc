@@ -17,6 +17,10 @@ enum GateType {
 using gate_t = std::pair<GateType, std::vector<int32_t>>;	//rodzaj bramki i sygnały wejściowe
 using circuit_t = std::map<int32_t, gate_t>;	//klucze to sygnały wyjściowe, wartości to bramki, z których wychodzą
 using signalCombinations = std::vector<std::vector<bool>>; //struktura do przechowywania kombinacji sygnałów wejsicowych
+using mapIntBool = std::map<int32_t,bool>; // lepsza nazwa by sie przydala, oczy mnie bola jak patrze na to std::map<int32_t,bool> wszedzie
+using pairIntBool = std::pair<int32_t,bool>; // tutaj to samo mozna usunac to pod koniec jak sie niczego ladniejszego nie wymysli
+
+
 
 /**
  * Funkcja generuje wszystkie możliwe kombinacje sygnałów wejściowych dla n przewodów wejściowych
@@ -30,6 +34,49 @@ void genSignalCombinations(signalCombinations &sc, std::vector<bool> &currCombin
 	genSignalCombinations(sc, currCombination, index + 1, n);
 	currCombination[index] = true;
 	genSignalCombinations(sc, currCombination, index + 1, n);
+}
+
+bool dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, mapIntBool &dfsVisited) {
+	visited.at(wire) = true;
+	dfsVisited.at(wire) = true;
+	for (int32_t w : circuit.at(wire).second) {
+		if (dfsVisited.at(w) == true) {
+			//cycle detected
+			return true;
+		}
+		if (visited.at(w) == false)
+			dfsCycleDetection(w, circuit, visited, dfsVisited);
+	}
+	dfsVisited[wire] = false;
+	return false;
+}
+
+/**
+ * Funkcja przygotowuje wszystkie potrzebne dane do wykrywania cykli czyli dwie mapy do oznaczania odwiedzonych przewodow
+ */
+void cycleDetection(circuit_t &circuit) {
+	// nie wiem jak sie ten algorytm wykrywania cykli nazywa i czemu dziala ale hindus z tutoriala na yt bardzo mnie do niego przekonał 
+	// https://www.youtube.com/watch?v=uzVUw90ZFIg
+	mapIntBool visited;
+	mapIntBool dfsVisited;
+	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
+		std::cout<< it->first<<std::endl;
+		visited.insert(pairIntBool(it->first,false));
+		dfsVisited.insert(pairIntBool(it->first,false));
+	}
+
+	std::cout << visited.size();
+
+	bool cycleDetected = false;
+
+	for (mapIntBool::iterator it = visited.begin(); it != visited.end() && !cycleDetection; ++it) {
+		if (it->second == false) {
+			if (dfsCycleDetection(it->first, circuit, visited, dfsVisited)) {
+				std::cout << "cycle detected";
+				return;
+			}
+		}
+	}
 }
 
 enum GateType GateTypeFromString(std::string s) {
