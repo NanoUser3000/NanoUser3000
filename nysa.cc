@@ -7,6 +7,7 @@
 #include <vector>
 #include <cstdint>
 #include <cassert>
+#include <set>
 
 enum GateType {
 	XOR, OR, NOR, AND, NAND, NOT,
@@ -15,6 +16,21 @@ enum GateType {
 
 using gate_t = std::pair<GateType, std::vector<int32_t>>;	//rodzaj bramki i sygnały wejściowe
 using circuit_t = std::map<int32_t, gate_t>;	//klucze to sygnały wyjściowe, wartości to bramki, z których wychodzą
+using signalCombinations = std::vector<std::vector<bool>>; //struktura do przechowywania kombinacji sygnałów wejsicowych
+
+/**
+ * Funkcja generuje wszystkie możliwe kombinacje sygnałów wejściowych dla n przewodów wejściowych
+ */
+void genSignalCombinations(signalCombinations &sc, std::vector<bool> &currCombination, int32_t index, int n) {
+	if (index == n) {
+		sc.push_back(currCombination);
+		return;
+	}
+	currCombination[index] = false;
+	genSignalCombinations(sc, currCombination, index + 1, n);
+	currCombination[index] = true;
+	genSignalCombinations(sc, currCombination, index + 1, n);
+}
 
 enum GateType GateTypeFromString(std::string s) {
 	if (s == "XOR") {
@@ -91,7 +107,7 @@ GateType whatType(std::string line) {
  * Wczytuje sygnał z linii do obwodu (o ile linia jest poprawna składniowo).
  * Sparametryzowana kontekstem wywołania.
  */
-void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error) {
+void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error, std::set<int32_t> &inSignals, std::set<int32_t> &outSignals) {
 	GateType type = whatType(line);
 	switch (type) {//! zamienić na if-else
 		case NULLGATE:
@@ -116,10 +132,12 @@ void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error)
 				errorMulOutput(lineNo, outSignal);
 				error = true;
 			}
+			outSignals.insert(outSignal);
 
 			int32_t inSignal;
 			while (str >> inSignal) {
 				gate.second.push_back(inSignal);
+				inSignals.insert(inSignal);
 			}
 			assert(goodGate(gate));
 
@@ -135,18 +153,44 @@ void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error)
 	}
 }
 
+
 int main(void) {
 
 	bool error = false;
 	circuit_t circuit;	//struktura reprezentująca obwód
 
+	std::set<int32_t> inSignals; // przewody ktore wchodzą w jakąs bramke
+	std::set<int32_t> outSignals; // przewody które wychodzą z jakiejś bramki
+
 	std::string line;
 	int32_t lineNo = 0;
 	while (std::getline(std::cin, line)) {
 		++lineNo;
-		addSignal(circuit, line, lineNo, error);	//error może być zmieniony
+		addSignal(circuit, line, lineNo, error, inSignals, outSignals);	//error może być zmieniony
 	}
 
+	// sygnały końcowe i poczatkowe z calego obwodu
+	std::set<int32_t> endSignals;
+	std::set<int32_t> begSignals;
+
+	// roznica teorio mnogosciowa zbiorow outSignals - inSignals daja przewody które wychodzą z całego obwodu
+	std::set_difference(outSignals.begin(),outSignals.end(),inSignals.begin(),inSignals.end(),
+						std::inserter(endSignals,endSignals.end()));
+
+	// roznica teorio mnogosciowa zbiorow  inSignals - outSignalsdaja przewody które wychodzą z całego obwodu
+	std::set_difference(inSignals.begin(),inSignals.end(),outSignals.begin(),outSignals.end(),
+						std::inserter(begSignals,begSignals.end()));
+
+
+	
+	/*
+	std::cout << "InSignals" << std::endl;
+	for (int32_t signal : inSingals) 
+		std::cout << signal << std::endl;
+
+	std::cout << "OutSignals" << std::endl;
+	for (int32_t signal : outSignals) 
+		std::cout << signal << std::endl;
 	//obwód utworzony (jako zmienna circuit)
 	
 	if (error) {
@@ -154,11 +198,14 @@ int main(void) {
 		std::cout << "error" << std::endl;//!//D
 		return 0;
 	}
+	*/
 
 	/*poprawny obwód (jeśli chodzi o składnię danych
 	i to, że każdy sygnał może być maks. jednym wyjściem) */
 
-	std::set<int32_t> inSignals;//do uzupełnienia podczas szukania cykli
+	//std::set<int32_t> inSignals;//do uzupełnienia podczas szukania cykli
+
+
 	
 	//w funkcji rekur. szukającej cykli:
 	/*
