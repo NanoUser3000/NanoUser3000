@@ -76,7 +76,14 @@ void calcWire(int32_t wire, circuit_t &circuit, std::map<int32_t,int32_t> &value
 			calcWire(w, circuit, values);
 			inGateValues.push_back(values.at(w));
 		}
-
+		if (wire == 7){
+			/*
+			std::cout <<"dupa";
+			for (size_t i = 0; i < inGateValues.size(); i++) {
+				std::cout << inGateValues[i]<< std::endl;
+			}
+			*/
+		}
 		values[wire] = calcGate(circuit.at(wire).first,inGateValues);
 	}
 }
@@ -86,8 +93,11 @@ void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
 	std::vector<bool> currentInput(inSignals.size(),false);	//wartosci dla przewodow wejsiowych
 
 	//dodanie do mapy przewodow wejsciowych
-	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it) 
-		values[*it] = -1;
+	size_t index = 0;
+	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
+		values[*it] = currentInput[index];
+		index++;
+	}
 
 	// dodanie do mapy reszty przewodow
 	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
@@ -105,6 +115,13 @@ void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
 		std::cout << std::endl;
 		
 		nextCombination(currentInput);
+		size_t index = 0;
+		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
+			values[*it] = currentInput[index];
+			index++;
+		}
+		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+			values[it->first] = -1;
 	}
 }
 
@@ -295,6 +312,7 @@ int main(void) {
 
 	cycleDetection(circuit, signals);
 	
+	calculateTruthTable(circuit, signals);
 	
 	//w funkcji rekur. szukającej cykli:
 	/*
