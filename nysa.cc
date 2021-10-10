@@ -1,5 +1,5 @@
 #include <iostream>
-#include <string>
+	#include <string>
 #include <sstream>
 #include <regex>
 #include <map>
@@ -7,7 +7,7 @@
 #include <vector>
 #include <cstdint>
 #include <cassert>
-#include <set>
+#include <math.h>
 
 enum GateType {
 	XOR, OR, NOR, AND, NAND, NOT,
@@ -20,65 +20,64 @@ using signalCombinations = std::vector<std::vector<bool>>; //struktura do przech
 using mapIntBool = std::map<int32_t,bool>; // lepsza nazwa by sie przydala, oczy mnie bola jak patrze na to std::map<int32_t,bool> wszedzie
 using pairIntBool = std::pair<int32_t,bool>; // tutaj to samo mozna usunac to pod koniec jak sie niczego ladniejszego nie wymysli
 
-
-
 /**
- * Funkcja generuje wszystkie możliwe kombinacje sygnałów wejściowych dla n przewodów wejściowych
+ * Funkcja dodaje binarnie 1 do combinations
  */
-void genSignalCombinations(signalCombinations &sc, std::vector<bool> &currCombination, int32_t index, int n) {
-	if (index == n) {
-		sc.push_back(currCombination);
-		return;
+void nextCombination(std::vector<bool> &combination) {
+	bool carry = true;
+	for (int i = combination.size()-1; i >= 0; i--) {
+		if (combination[i] && carry) {
+			combination[i] = false;
+		}
+		else {
+			combination[i] = true;
+			return;
+		}
 	}
-	currCombination[index] = false;
-	genSignalCombinations(sc, currCombination, index + 1, n);
-	currCombination[index] = true;
-	genSignalCombinations(sc, currCombination, index + 1, n);
 }
 
-bool dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, mapIntBool &dfsVisited) {
+void dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, mapIntBool &dfsVisited, bool &cycleDetected, std::set<int32_t> &signals) {
 	visited.at(wire) = true;
 	dfsVisited.at(wire) = true;
 	for (int32_t w : circuit.at(wire).second) {
-		if (dfsVisited.at(w) == true) {
-			//cycle detected
-			return true;
+		circuit_t::iterator it = circuit.find(w);
+		if (it == circuit.end()) {
+			signals.insert(w);
 		}
-		if (visited.at(w) == false)
-			dfsCycleDetection(w, circuit, visited, dfsVisited);
+		else {
+			if (!visited.at(w)) 
+				dfsCycleDetection(w, circuit, visited, dfsVisited, cycleDetected, signals);
+			else if (dfsVisited.at(w))
+				cycleDetected = true;
+		}
 	}
 	dfsVisited[wire] = false;
-	return false;
+	return;
 }
 
 /**
  * Funkcja przygotowuje wszystkie potrzebne dane do wykrywania cykli czyli dwie mapy do oznaczania odwiedzonych przewodow
  */
-void cycleDetection(circuit_t &circuit) {
-	// nie wiem jak sie ten algorytm wykrywania cykli nazywa i czemu dziala ale hindus z tutoriala na yt bardzo mnie do niego przekonał 
-	// https://www.youtube.com/watch?v=uzVUw90ZFIg
+void cycleDetection(circuit_t &circuit, std::set<int32_t> &signals) {
 	mapIntBool visited;
 	mapIntBool dfsVisited;
 	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
-		std::cout<< it->first<<std::endl;
 		visited.insert(pairIntBool(it->first,false));
 		dfsVisited.insert(pairIntBool(it->first,false));
 	}
 
-	std::cout << visited.size();
-
 	bool cycleDetected = false;
 
-	for (mapIntBool::iterator it = visited.begin(); it != visited.end() && !cycleDetection; ++it) {
-		if (it->second == false) {
-			if (dfsCycleDetection(it->first, circuit, visited, dfsVisited)) {
-				std::cout << "cycle detected";
-				return;
-			}
-		}
+	for (mapIntBool::iterator it = visited.begin(); it != visited.end(); ++it) {
+		if (it->second == false) 
+			dfsCycleDetection(it->first, circuit, visited, dfsVisited, cycleDetected, signals);
+	}
+
+	if (cycleDetected) {
+		std::cout << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
+		return;
 	}
 }
-
 enum GateType GateTypeFromString(std::string s) {
 	if (s == "XOR") {
 		return XOR;
@@ -117,6 +116,7 @@ bool goodGate(gate_t gate) {
 	}
 }
 
+
 void errorLine( int32_t lineNo, std::string line) {
 	std::cout << "Error in line " << lineNo << ": " << line << std::endl;
 }
@@ -154,9 +154,9 @@ GateType whatType(std::string line) {
  * Wczytuje sygnał z linii do obwodu (o ile linia jest poprawna składniowo).
  * Sparametryzowana kontekstem wywołania.
  */
-void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error, std::set<int32_t> &inSignals, std::set<int32_t> &outSignals) {
+void addSignal(circuit_t &circuit, std::string line, int32_t lineNo, bool& error) {
 	GateType type = whatType(line);
-	switch (type) {//! zamienić na if-else
+	switch (type) {
 		case NULLGATE:
 		{
 			errorLine(lineNo, line);
@@ -179,18 +179,17 @@ void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error,
 				errorMulOutput(lineNo, outSignal);
 				error = true;
 			}
-			outSignals.insert(outSignal);
 
 			int32_t inSignal;
 			while (str >> inSignal) {
 				gate.second.push_back(inSignal);
-				inSignals.insert(inSignal);
 			}
 			assert(goodGate(gate));
 
 			str >> std::ws;
 			assert(str.eof());
 			
+			//circuit.insert(std::pair<int32_t,gate_t>(outSignal,gate));
 			circuit[outSignal] = gate;
 
 			std::cout << "tak, wczytano " << gType << std::endl;//!//D
@@ -200,59 +199,30 @@ void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error,
 	}
 }
 
-
 int main(void) {
 
 	bool error = false;
 	circuit_t circuit;	//struktura reprezentująca obwód
 
-	std::set<int32_t> inSignals; // przewody ktore wchodzą w jakąs bramke
-	std::set<int32_t> outSignals; // przewody które wychodzą z jakiejś bramki
-
 	std::string line;
 	int32_t lineNo = 0;
 	while (std::getline(std::cin, line)) {
 		++lineNo;
-		addSignal(circuit, line, lineNo, error, inSignals, outSignals);	//error może być zmieniony
+		addSignal(circuit, line, lineNo, error);	//error może być zmieniony
 	}
 
-	// sygnały końcowe i poczatkowe z calego obwodu
-	std::set<int32_t> endSignals;
-	std::set<int32_t> begSignals;
-
-	// roznica teorio mnogosciowa zbiorow outSignals - inSignals daja przewody które wychodzą z całego obwodu
-	std::set_difference(outSignals.begin(),outSignals.end(),inSignals.begin(),inSignals.end(),
-						std::inserter(endSignals,endSignals.end()));
-
-	// roznica teorio mnogosciowa zbiorow  inSignals - outSignalsdaja przewody które wychodzą z całego obwodu
-	std::set_difference(inSignals.begin(),inSignals.end(),outSignals.begin(),outSignals.end(),
-						std::inserter(begSignals,begSignals.end()));
-
-
-	
-	/*
-	std::cout << "InSignals" << std::endl;
-	for (int32_t signal : inSingals) 
-		std::cout << signal << std::endl;
-
-	std::cout << "OutSignals" << std::endl;
-	for (int32_t signal : outSignals) 
-		std::cout << signal << std::endl;
 	//obwód utworzony (jako zmienna circuit)
-	
 	if (error) {
-		//obwód błędny, koniec programu
 		std::cout << "error" << std::endl;//!//D
 		return 0;
 	}
-	*/
 
 	/*poprawny obwód (jeśli chodzi o składnię danych
 	i to, że każdy sygnał może być maks. jednym wyjściem) */
+	std::set<int32_t> signals;
 
-	//std::set<int32_t> inSignals;//do uzupełnienia podczas szukania cykli
-
-
+	cycleDetection(circuit, signals);
+	
 	
 	//w funkcji rekur. szukającej cykli:
 	/*
@@ -268,3 +238,4 @@ int main(void) {
 
 	return 0;
 }
+
