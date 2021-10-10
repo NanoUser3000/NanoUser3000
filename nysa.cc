@@ -1,5 +1,5 @@
 #include <iostream>
-	#include <string>
+#include <string>
 #include <sstream>
 #include <regex>
 #include <map>
@@ -33,6 +33,78 @@ void nextCombination(std::vector<bool> &combination) {
 			combination[i] = true;
 			return;
 		}
+	}
+}
+
+bool andGate(std::vector<bool> input) {
+	bool result = input[0];
+	for (size_t i = 1; i < input.size(); ++i)
+		result &= input[i];
+	return result;
+}
+
+bool orGate(std::vector<bool> input) {
+	bool result = input[0];
+	for (size_t i = 1; i < input.size(); ++i)
+		result |= input[i];
+	return result;
+}
+
+bool calcGate(GateType type, std::vector<bool> input) {
+	if (type == XOR)
+		return input[0] ^ input[1];
+	else if (type == OR)
+		return orGate(input);
+	else if (type == NOR)
+		return !orGate(input);
+	else if (type == AND)
+		return andGate(input);
+	else if (type == NAND)
+		return !andGate(input);
+	else if (type == NOT)
+		return (!input[0]);
+	return false;
+}
+
+void calcWire(int32_t wire, circuit_t &circuit, std::map<int32_t,int32_t> &values) {
+	if (values.at(wire) != -1)
+		return;
+	else {
+		// liczymy wszystkie potrzebne przewody do wyliczenia wire
+		std::vector<bool> inGateValues; // wartosci przewodow wchodzacych do bramki z ktorej wychodzi wire
+		for (int32_t w : circuit.at(wire).second) {
+			calcWire(w, circuit, values);
+			inGateValues.push_back(values.at(w));
+		}
+
+		values[wire] = calcGate(circuit.at(wire).first,inGateValues);
+	}
+}
+
+void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
+	std::map<int32_t,int32_t> values;
+	std::vector<bool> currentInput(inSignals.size(),false);	//wartosci dla przewodow wejsiowych
+
+	//dodanie do mapy przewodow wejsciowych
+	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it) 
+		values[*it] = -1;
+
+	// dodanie do mapy reszty przewodow
+	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+		values[it->first] = -1;
+
+	//petla wykonuje sie 2^(liczba przewodow wejsciowych) razy aby policzyc tabele prawdy dla kazdej kombinacji 
+	for (int i = 0; i < pow(2,inSignals.size()); ++i) {
+		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
+			calcWire(it->first,circuit,values);
+		}
+		//po obliczeniu wypisujemy warosci
+		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) {
+			std::cout << it->second;
+		}
+		std::cout << std::endl;
+		
+		nextCombination(currentInput);
 	}
 }
 
@@ -238,4 +310,3 @@ int main(void) {
 
 	return 0;
 }
-
