@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cassert>
 #include <math.h>
+#include <unordered_set>
 
 enum GateType {
 	XOR, OR, NOR, AND, NAND, NOT,
@@ -21,7 +22,7 @@ using mapIntBool = std::map<int32_t,bool>; // lepsza nazwa by sie przydala, oczy
 using pairIntBool = std::pair<int32_t,bool>; // tutaj to samo mozna usunac to pod koniec jak sie niczego ladniejszego nie wymysli
 
 /**
- * Funkcja dodaje binarnie 1 do combinations
+ * Funkcja przyjmuje vector wartosci typu bool traktuje je jako liczbe w systemie binaranym i dodaje do niego binarnie jedynke
  */
 void nextCombination(std::vector<bool> &combination) {
 	bool carry = true;
@@ -66,38 +67,29 @@ bool calcGate(GateType type, std::vector<bool> input) {
 	return false;
 }
 
+/**
+ *	Funkcja rekurencyjnie oblicza wartości na każdym przewodzie 
+ */
 void calcWire(int32_t wire, circuit_t &circuit, std::map<int32_t,int32_t> &values) {
-	if (values.at(wire) != -1)
+	if (values.at(wire) != -1)	// wartosc przewodu jest już policzona
 		return;
 	else {
-		// liczymy wszystkie potrzebne przewody do wyliczenia wire
-		std::vector<bool> inGateValues; // wartosci przewodow wchodzacych do bramki z ktorej wychodzi wire
-		for (int32_t w : circuit.at(wire).second) {
+		std::vector<bool> inGateValues; // vector wartośći potrzebnych do policzenia przewodu wire
+		for (int32_t w : circuit.at(wire).second) {	
 			calcWire(w, circuit, values);
 			inGateValues.push_back(values.at(w));
-		}
-		if (wire == 7){
-			/*
-			std::cout <<"dupa";
-			for (size_t i = 0; i < inGateValues.size(); i++) {
-				std::cout << inGateValues[i]<< std::endl;
-			}
-			*/
 		}
 		values[wire] = calcGate(circuit.at(wire).first,inGateValues);
 	}
 }
 
 void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
-	std::map<int32_t,int32_t> values;
+	std::map<int32_t,int32_t> values;	// mapa (sortowana domyślnie rosnąco po kluczu) (klucz,wartość) = (nr sygnału,wartość logiczna)
 	std::vector<bool> currentInput(inSignals.size(),false);	//wartosci dla przewodow wejsiowych
 
 	//dodanie do mapy przewodow wejsciowych
-	size_t index = 0;
-	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
-		values[*it] = currentInput[index];
-		index++;
-	}
+	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it) 
+		values[*it] = -1;
 
 	// dodanie do mapy reszty przewodow
 	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
@@ -105,37 +97,44 @@ void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
 
 	//petla wykonuje sie 2^(liczba przewodow wejsciowych) razy aby policzyc tabele prawdy dla kazdej kombinacji 
 	for (int i = 0; i < pow(2,inSignals.size()); ++i) {
-		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
-			calcWire(it->first,circuit,values);
+
+		// ustawienie wartości przewodów wejsciowych
+		size_t j = 0;
+		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
+			values[*it] = currentInput[j];
+			j++;
 		}
-		//po obliczeniu wypisujemy warosci
+		
+		// liczenie wartości przewodów 
+		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+			calcWire(it->first,circuit,values);
+
+		// wypisanie tablicy prawdy dla danej kombinacji wejsciowej
 		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) {
 			std::cout << it->second;
 		}
 		std::cout << std::endl;
 		
+
+		// policznie kolejnej kombinacji wartości przewodów początkowych i 'wyzerowanie' wartości przewodów w obwodzie z poprzedniej kombinacji
 		nextCombination(currentInput);
-		size_t index = 0;
-		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
-			values[*it] = currentInput[index];
-			index++;
-		}
 		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
 			values[it->first] = -1;
 	}
 }
 
-void dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, mapIntBool &dfsVisited, bool &cycleDetected, std::set<int32_t> &signals) {
+void dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, 
+					   mapIntBool &dfsVisited, bool &cycleDetected, std::set<int32_t> &inSignals) {
 	visited.at(wire) = true;
 	dfsVisited.at(wire) = true;
 	for (int32_t w : circuit.at(wire).second) {
 		circuit_t::iterator it = circuit.find(w);
 		if (it == circuit.end()) {
-			signals.insert(w);
+			inSignals.insert(w);
 		}
 		else {
 			if (!visited.at(w)) 
-				dfsCycleDetection(w, circuit, visited, dfsVisited, cycleDetected, signals);
+				dfsCycleDetection(w, circuit, visited, dfsVisited, cycleDetected, inSignals);
 			else if (dfsVisited.at(w))
 				cycleDetected = true;
 		}
@@ -144,10 +143,7 @@ void dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, ma
 	return;
 }
 
-/**
- * Funkcja przygotowuje wszystkie potrzebne dane do wykrywania cykli czyli dwie mapy do oznaczania odwiedzonych przewodow
- */
-void cycleDetection(circuit_t &circuit, std::set<int32_t> &signals) {
+void cycleDetection(circuit_t &circuit, std::set<int32_t> &inSignals) {
 	mapIntBool visited;
 	mapIntBool dfsVisited;
 	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
@@ -159,7 +155,7 @@ void cycleDetection(circuit_t &circuit, std::set<int32_t> &signals) {
 
 	for (mapIntBool::iterator it = visited.begin(); it != visited.end(); ++it) {
 		if (it->second == false) 
-			dfsCycleDetection(it->first, circuit, visited, dfsVisited, cycleDetected, signals);
+			dfsCycleDetection(it->first, circuit, visited, dfsVisited, cycleDetected, inSignals);
 	}
 
 	if (cycleDetected) {
@@ -306,25 +302,11 @@ int main(void) {
 		return 0;
 	}
 
-	/*poprawny obwód (jeśli chodzi o składnię danych
-	i to, że każdy sygnał może być maks. jednym wyjściem) */
-	std::set<int32_t> signals;
+	
+	std::set<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
 
-	cycleDetection(circuit, signals);
-	
-	calculateTruthTable(circuit, signals);
-	
-	//w funkcji rekur. szukającej cykli:
-	/*
-	if(circuit.find(n) == circuit.end()) {
-		inSignals.insert(n);
-		return true;	//jest ok jeśli chodzi o cykle -- doszliśmy do sygnału wejściowego
-	}
-	else {
-		//rekurencja szukająca cykli:
-		coś_tam_coś(map[n])
-	}
-	*/
+	cycleDetection(circuit, inSignals);
+	calculateTruthTable(circuit, inSignals);
 
 	return 0;
 }
