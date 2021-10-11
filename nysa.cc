@@ -17,13 +17,8 @@ enum GateType {
 
 using gate_t = std::pair<GateType, std::vector<int32_t>>;	//rodzaj bramki i sygnały wejściowe
 using circuit_t = std::map<int32_t, gate_t>;	//klucze to sygnały wyjściowe, wartości to bramki, z których wychodzą
-using signalCombinations = std::vector<std::vector<bool>>; //struktura do przechowywania kombinacji sygnałów wejsicowych
-using mapIntBool = std::map<int32_t,bool>; // lepsza nazwa by sie przydala, oczy mnie bola jak patrze na to std::map<int32_t,bool> wszedzie
-using pairIntBool = std::pair<int32_t,bool>; // tutaj to samo mozna usunac to pod koniec jak sie niczego ladniejszego nie wymysli
+using markingMap = std::map<int32_t,std::pair<int32_t,int32_t>>; 
 
-/**
- * Funkcja przyjmuje vector wartosci typu bool traktuje je jako liczbe w systemie binaranym i dodaje do niego binarnie jedynke
- */
 void nextCombination(std::vector<bool> &combination) {
 	bool carry = true;
 	for (int i = combination.size()-1; i >= 0; i--) {
@@ -67,102 +62,79 @@ bool calcGate(GateType type, std::vector<bool> input) {
 	return false;
 }
 
-/**
- *	Funkcja rekurencyjnie oblicza wartości na każdym przewodzie 
- */
-void calcWire(int32_t wire, circuit_t &circuit, std::map<int32_t,int32_t> &values) {
-	if (values.at(wire) != -1)	// wartosc przewodu jest już policzona
-		return;
-	else {
-		std::vector<bool> inGateValues; // vector wartośći potrzebnych do policzenia przewodu wire
-		for (int32_t w : circuit.at(wire).second) {	
-			calcWire(w, circuit, values);
-			inGateValues.push_back(values.at(w));
-		}
-		values[wire] = calcGate(circuit.at(wire).first,inGateValues);
-	}
+void calcWire(circuit_t &circuit, int32_t wire, std::map<int32_t,int32_t> &values) {
+	std::vector<bool> inputSignals;
+	for (int32_t x : circuit.at(wire).second) 
+		inputSignals.push_back(x);
+
+	values[wire] = calcGate(circuit.at(wire).first,inputSignals);
 }
 
-void calculateTruthTable(circuit_t circuit, std::set<int32_t> &inSignals) {
-	std::map<int32_t,int32_t> values;	// mapa (sortowana domyślnie rosnąco po kluczu) (klucz,wartość) = (nr sygnału,wartość logiczna)
-	std::vector<bool> currentInput(inSignals.size(),false);	//wartosci dla przewodow wejsiowych
+void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::vector<int32_t> &inSignals) {
+	std::map<int32_t,int32_t> values; // 0,1 albo -1 jak nie ma 
+	std::vector<bool> currInput(inSignals.size(),false); // poczatakowe wartosci inputu
 
-	//dodanie do mapy przewodow wejsciowych
-	for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it) 
-		values[*it] = -1;
+	for (int32_t inSignal : inSignals) 
+		values[inSignal] = -1;
 
-	// dodanie do mapy reszty przewodow
-	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
-		values[it->first] = -1;
+	for (int32_t n : order) 
+		values[n] = -1;
 
-	//petla wykonuje sie 2^(liczba przewodow wejsciowych) razy aby policzyc tabele prawdy dla kazdej kombinacji 
-	for (int i = 0; i < pow(2,inSignals.size()); ++i) {
+	for (size_t i = 0; i < pow(2,inSignals.size()); ++i) {
+		for (size_t i = 0; i < inSignals.size(); ++i) 
+			values[inSignals[i]] = currInput[i];
 
-		// ustawienie wartości przewodów wejsciowych
-		size_t j = 0;
-		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); ++it)  {
-			values[*it] = currentInput[j];
-			j++;
-		}
-		
-		// liczenie wartości przewodów 
-		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
-			calcWire(it->first,circuit,values);
+		for (int32_t n : order) 
+			calcWire(circuit,n,values);
 
-		// wypisanie tablicy prawdy dla danej kombinacji wejsciowej
-		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) {
+		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) 
 			std::cout << it->second;
-		}
 		std::cout << std::endl;
-		
 
-		// policznie kolejnej kombinacji wartości przewodów początkowych i 'wyzerowanie' wartości przewodów w obwodzie z poprzedniej kombinacji
-		nextCombination(currentInput);
-		for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
-			values[it->first] = -1;
+		nextCombination(currInput);
+
 	}
 }
 
-void dfsCycleDetection(int32_t wire, circuit_t &circuit, mapIntBool &visited, 
-					   mapIntBool &dfsVisited, bool &cycleDetected, std::set<int32_t> &inSignals) {
-	visited.at(wire) = true;
-	dfsVisited.at(wire) = true;
-	for (int32_t w : circuit.at(wire).second) {
-		circuit_t::iterator it = circuit.find(w);
-		if (it == circuit.end()) {
-			inSignals.insert(w);
-		}
-		else {
-			if (!visited.at(w)) 
-				dfsCycleDetection(w, circuit, visited, dfsVisited, cycleDetected, inSignals);
-			else if (dfsVisited.at(w))
-				cycleDetected = true;
-		}
-	}
-	dfsVisited[wire] = false;
-	return;
-}
-
-void cycleDetection(circuit_t &circuit, std::set<int32_t> &inSignals) {
-	mapIntBool visited;
-	mapIntBool dfsVisited;
-	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) {
-		visited.insert(pairIntBool(it->first,false));
-		dfsVisited.insert(pairIntBool(it->first,false));
-	}
-
-	bool cycleDetected = false;
-
-	for (mapIntBool::iterator it = visited.begin(); it != visited.end(); ++it) {
-		if (it->second == false) 
-			dfsCycleDetection(it->first, circuit, visited, dfsVisited, cycleDetected, inSignals);
-	}
-
-	if (cycleDetected) {
-		std::cout << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
+void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t> &order, std::vector<int32_t> &inSignals, bool &dag) {
+	std::map<int32_t,std::pair<bool,bool>>::iterator it = mark.find(n);
+	if (it == mark.end()) {
+		inSignals.push_back(n);
 		return;
 	}
+	// sprawdza temporary mark
+	if (mark.at(n).first) {
+		dag = false;
+		return;
+	}
+	// sprawdza permament mark
+	if (mark.at(n).second) 
+		return;
+	
+	mark.at(n).first = true;
+	for (int32_t m : circuit.at(n).second) 
+		visit(m,circuit,mark,order,inSignals,dag);
+	
+	mark.at(n).first = false;
+	mark.at(n).second = true;
+
+	order.push_back(n);
 }
+
+void topoSort(circuit_t &circuit, std::vector<int32_t> &order, std::vector<int32_t> &inSignals, bool &dag) {
+
+	markingMap mark;
+
+	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+		mark[it->first] = std::make_pair(false,false);
+
+	for (markingMap::iterator it = mark.begin(); it != mark.end(); ++it) {
+		if (!mark.at(it->first).second)
+			visit(it->first,circuit, mark, order, inSignals, dag);
+	}
+
+}
+
 enum GateType GateTypeFromString(std::string s) {
 	if (s == "XOR") {
 		return XOR;
@@ -289,6 +261,8 @@ int main(void) {
 	bool error = false;
 	circuit_t circuit;	//struktura reprezentująca obwód
 
+	std::unordered_set<int32_t> outSignals;
+
 	std::string line;
 	int32_t lineNo = 0;
 	while (std::getline(std::cin, line)) {
@@ -303,10 +277,19 @@ int main(void) {
 	}
 
 	
-	std::set<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
+	std::vector<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
+	std::vector<int32_t> order;
+	bool dag = true;
 
-	cycleDetection(circuit, inSignals);
-	calculateTruthTable(circuit, inSignals);
+	topoSort(circuit,order,inSignals,dag);
+
+	if (!dag) {
+		std::cout << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
+		return 0;
+	}
+
+	runSimulation(circuit,order,inSignals);
+
 
 	return 0;
 }
