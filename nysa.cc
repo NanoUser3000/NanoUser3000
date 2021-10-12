@@ -17,7 +17,7 @@ enum GateType {
 
 using gate_t = std::pair<GateType, std::vector<int32_t>>;	//rodzaj bramki i sygnały wejściowe
 using circuit_t = std::map<int32_t, gate_t>;	//klucze to sygnały wyjściowe, wartości to bramki, z których wychodzą
-using markingMap = std::map<int32_t,std::pair<int32_t,int32_t>>; 
+using markingMap = std::map<int32_t,std::pair<int32_t,int32_t>>; //klucz to numer przewodu para to dwie wartości potrzebne do topoSort tempMark i permamentMark
 
 void nextCombination(std::vector<bool> &combination) {
 	bool carry = true;
@@ -46,9 +46,15 @@ bool orGate(std::vector<bool> input) {
 	return result;
 }
 
-bool calcGate(GateType type, std::vector<bool> input) {
+bool xor_(bool a, bool b) {
+	if ((a && b) || (!a && !b))
+		return false;
+	return true;
+}
+
+bool calcGate(GateType type, std::vector<bool> &input) {
 	if (type == XOR)
-		return input[0] ^ input[1];
+		return xor_(input[0],input[1]);
 	else if (type == OR)
 		return orGate(input);
 	else if (type == NOR)
@@ -64,13 +70,18 @@ bool calcGate(GateType type, std::vector<bool> input) {
 
 void calcWire(circuit_t &circuit, int32_t wire, std::map<int32_t,int32_t> &values) {
 	std::vector<bool> inputSignals;
-	for (int32_t x : circuit.at(wire).second) 
-		inputSignals.push_back(x);
+	//std::cout << wire;
+	//std::cout <<":";
+	for (int32_t x : circuit.at(wire).second)  {
+		inputSignals.push_back(values[x]);
+		//std::cout << values[x];
+	}
+	//std::cout << std::endl;
 
 	values[wire] = calcGate(circuit.at(wire).first,inputSignals);
 }
 
-void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::vector<int32_t> &inSignals) {
+void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t> &inSignals) {
 	std::map<int32_t,int32_t> values; // 0,1 albo -1 jak nie ma 
 	std::vector<bool> currInput(inSignals.size(),false); // poczatakowe wartosci inputu
 
@@ -80,9 +91,13 @@ void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::vector<
 	for (int32_t n : order) 
 		values[n] = -1;
 
-	for (size_t i = 0; i < pow(2,inSignals.size()); ++i) {
-		for (size_t i = 0; i < inSignals.size(); ++i) 
-			values[inSignals[i]] = currInput[i];
+	for (size_t i = 0; i < pow(2,inSignals.size()); i++) {
+		size_t j = 0;
+		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); it++) {
+			values[*it] = currInput[j];
+			j++;
+		}
+
 
 		for (int32_t n : order) 
 			calcWire(circuit,n,values);
@@ -92,14 +107,13 @@ void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::vector<
 		std::cout << std::endl;
 
 		nextCombination(currInput);
-
 	}
 }
 
-void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t> &order, std::vector<int32_t> &inSignals, bool &dag) {
-	std::map<int32_t,std::pair<bool,bool>>::iterator it = mark.find(n);
+void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t> &order, std::set<int32_t> &inSignals, bool &dag) {
+	markingMap::iterator it = mark.find(n);
 	if (it == mark.end()) {
-		inSignals.push_back(n);
+		inSignals.insert(n);
 		return;
 	}
 	// sprawdza temporary mark
@@ -121,7 +135,7 @@ void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t>
 	order.push_back(n);
 }
 
-void topoSort(circuit_t &circuit, std::vector<int32_t> &order, std::vector<int32_t> &inSignals, bool &dag) {
+void topoSort(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t> &inSignals, bool &dag) {
 
 	markingMap mark;
 
@@ -249,7 +263,7 @@ void addSignal(circuit_t &circuit, std::string line, int32_t lineNo, bool& error
 			//circuit.insert(std::pair<int32_t,gate_t>(outSignal,gate));
 			circuit[outSignal] = gate;
 
-			std::cout << "tak, wczytano " << gType << std::endl;//!//D
+			//std::cout << "tak, wczytano " << gType << std::endl;//!//D
 
 			break;
 		}
@@ -277,7 +291,7 @@ int main(void) {
 	}
 
 	
-	std::vector<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
+	std::set<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
 	std::vector<int32_t> order;
 	bool dag = true;
 
