@@ -53,19 +53,22 @@ bool xor_(bool a, bool b) {
 }
 
 bool calcGate(GateType type, std::vector<bool> &input) {
-	if (type == XOR)
-		return xor_(input[0],input[1]);
-	else if (type == OR)
-		return orGate(input);
-	else if (type == NOR)
-		return !orGate(input);
-	else if (type == AND)
-		return andGate(input);
-	else if (type == NAND)
-		return !andGate(input);
-	else if (type == NOT)
-		return (!input[0]);
-	return false;
+	switch (type) {
+	    case XOR:
+    		return xor_(input[0],input[1]);
+    	case OR:
+    		return orGate(input);
+    	case NOR:
+    		return !orGate(input);
+    	case AND:
+    		return andGate(input);
+    	case NAND:
+    		return !andGate(input);
+    	case NOT:
+    		return (!input[0]);
+    	default:
+    	    return false;
+    }
 }
 
 void calcWire(circuit_t &circuit, int32_t wire, std::map<int32_t,int32_t> &values) {
@@ -82,27 +85,27 @@ void calcWire(circuit_t &circuit, int32_t wire, std::map<int32_t,int32_t> &value
 }
 
 void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t> &inSignals) {
-	std::map<int32_t,int32_t> values; // 0,1 albo -1 jak nie ma 
+	std::map<int32_t,int32_t> values; // 0,1 albo -1 jak nie ma
 	std::vector<bool> currInput(inSignals.size(),false); // poczatakowe wartosci inputu
 
-	for (int32_t inSignal : inSignals) 
+	for (int32_t inSignal : inSignals)
 		values[inSignal] = -1;
 
-	for (int32_t n : order) 
+	for (int32_t n : order)
 		values[n] = -1;
 
 	for (size_t i = 0; i < pow(2,inSignals.size()); i++) {
 		size_t j = 0;
-		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); it++) {
+		for (auto it = inSignals.begin(); it != inSignals.end(); it++) {
 			values[*it] = currInput[j];
 			j++;
 		}
 
 
-		for (int32_t n : order) 
+		for (int32_t n : order)
 			calcWire(circuit,n,values);
 
-		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) 
+		for (auto it = values.begin(); it != values.end(); ++it)
 			std::cout << it->second;
 		std::cout << std::endl;
 
@@ -111,7 +114,7 @@ void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::set<int
 }
 
 void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t> &order, std::set<int32_t> &inSignals, bool &dag) {
-	markingMap::iterator it = mark.find(n);
+	auto it = mark.find(n);
 	if (it == mark.end()) {
 		inSignals.insert(n);
 		return;
@@ -122,11 +125,11 @@ void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t>
 		return;
 	}
 	// sprawdza permament mark
-	if (mark.at(n).second) 
+	if (mark.at(n).second)
 		return;
 	
 	mark.at(n).first = true;
-	for (int32_t m : circuit.at(n).second) 
+	for (int32_t m : circuit.at(n).second)
 		visit(m,circuit,mark,order,inSignals,dag);
 	
 	mark.at(n).first = false;
@@ -139,10 +142,10 @@ void topoSort(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t>
 
 	markingMap mark;
 
-	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+	for (auto it = circuit.begin(); it != circuit.end(); ++it)
 		mark[it->first] = std::make_pair(false,false);
 
-	for (markingMap::iterator it = mark.begin(); it != mark.end(); ++it) {
+	for (auto it = mark.begin(); it != mark.end(); ++it) {
 		if (!mark.at(it->first).second)
 			visit(it->first,circuit, mark, order, inSignals, dag);
 	}
@@ -176,8 +179,8 @@ enum GateType GateTypeFromString(std::string s) {
 bool goodGate(gate_t gate) {
 	switch(gate.first) {
 		case NULLGATE:
-			//assert(false);	//!?
-			return false;//!whatever
+			//assert(false)
+			return false;   //whatever
 		case NOT:
 			return gate.second.size() == 1;
 		case XOR:
@@ -194,19 +197,17 @@ void errorLine( int32_t lineNo, std::string line) {
 
 void errorMulOutput(int32_t lineNo, int32_t signalNo) {
 	std::cout << "Error in line " << lineNo << ": "
-		<< "signal " << signalNo << " is assigned to multiple outputs" << std::endl;	
+		<< "signal " << signalNo << " is assigned to multiple outputs." << std::endl;
 }
-
-//!ok że globalne?
-std::regex correctRegexXOR("^[[:space:]]*XOR([[:space:]]+0*[1-9]([0-9]){0,8}){3}[[:space:]]*$");//3 liczby
-std::regex correctRegexNOT("^[[:space:]]*NOT([[:space:]]+0*[1-9]([0-9]){0,8}){2}[[:space:]]*$");//2 liczby
-std::regex correctRegexRest("^[[:space:]]*(AND|OR|NAND|NOR)([[:space:]]+0*[1-9]([0-9]){0,8}){3,}[[:space:]]*$");//co najm. 3 liczby
 
 /**
  * Sprawdza też, czy liczby są z zakresu 1, 999999999
  */
 GateType whatType(std::string line) {
-	//! tu regexy?
+    std::regex correctRegexXOR("^[[:space:]]*XOR([[:space:]]+0*[1-9]([0-9]){0,8}){3}[[:space:]]*$");//3 liczby
+    std::regex correctRegexNOT("^[[:space:]]*NOT([[:space:]]+0*[1-9]([0-9]){0,8}){2}[[:space:]]*$");//2 liczby
+    std::regex correctRegexRest("^[[:space:]]*(AND|OR|NAND|NOR)([[:space:]]+0*[1-9]([0-9]){0,8}){3,}[[:space:]]*$");//co najm. 3 liczby
+
 	if (std::regex_match(line, correctRegexXOR)) {
 		return XOR;
 	}
@@ -259,11 +260,8 @@ void addSignal(circuit_t &circuit, std::string line, int32_t lineNo, bool& error
 
 			str >> std::ws;
 			assert(str.eof());
-			
-			//circuit.insert(std::pair<int32_t,gate_t>(outSignal,gate));
-			circuit[outSignal] = gate;
 
-			//std::cout << "tak, wczytano " << gType << std::endl;//!//D
+			circuit[outSignal] = gate;
 
 			break;
 		}
@@ -286,11 +284,11 @@ int main(void) {
 
 	//obwód utworzony (jako zmienna circuit)
 	if (error) {
-		std::cout << "error" << std::endl;//!//D
 		return 0;
 	}
 
-	
+    //obwód poprawny (poza ew. sekwencyjnością)
+
 	std::set<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
 	std::vector<int32_t> order;
 	bool dag = true;
@@ -302,8 +300,8 @@ int main(void) {
 		return 0;
 	}
 
-	runSimulation(circuit,order,inSignals);
-
+    if (inSignals.size() != 0)
+	    runSimulation(circuit,order,inSignals);
 
 	return 0;
 }
