@@ -7,7 +7,8 @@
 #include <vector>
 #include <cstdint>
 #include <cassert>
-#include <set>
+#include <math.h>
+#include <unordered_set>
 
 enum GateType {
 	XOR, OR, NOR, AND, NAND, NOT,
@@ -16,20 +17,136 @@ enum GateType {
 
 using gate_t = std::pair<GateType, std::vector<int32_t>>;	//rodzaj bramki i sygnały wejściowe
 using circuit_t = std::map<int32_t, gate_t>;	//klucze to sygnały wyjściowe, wartości to bramki, z których wychodzą
-using signalCombinations = std::vector<std::vector<bool>>; //struktura do przechowywania kombinacji sygnałów wejsicowych
+using markingMap = std::map<int32_t,std::pair<int32_t,int32_t>>; //klucz to numer przewodu para to dwie wartości potrzebne do topoSort tempMark i permamentMark
 
-/**
- * Funkcja generuje wszystkie możliwe kombinacje sygnałów wejściowych dla n przewodów wejściowych
- */
-void genSignalCombinations(signalCombinations &sc, std::vector<bool> &currCombination, int32_t index, int n) {
-	if (index == n) {
-		sc.push_back(currCombination);
+void nextCombination(std::vector<bool> &combination) {
+	bool carry = true;
+	for (int i = combination.size()-1; i >= 0; i--) {
+		if (combination[i] && carry) {
+			combination[i] = false;
+		}
+		else {
+			combination[i] = true;
+			return;
+		}
+	}
+}
+
+bool andGate(std::vector<bool> input) {
+	bool result = input[0];
+	for (size_t i = 1; i < input.size(); ++i)
+		result &= input[i];
+	return result;
+}
+
+bool orGate(std::vector<bool> input) {
+	bool result = input[0];
+	for (size_t i = 1; i < input.size(); ++i)
+		result |= input[i];
+	return result;
+}
+
+bool xor_(bool a, bool b) {
+	if ((a && b) || (!a && !b))
+		return false;
+	return true;
+}
+
+bool calcGate(GateType type, std::vector<bool> &input) {
+	if (type == XOR)
+		return xor_(input[0],input[1]);
+	else if (type == OR)
+		return orGate(input);
+	else if (type == NOR)
+		return !orGate(input);
+	else if (type == AND)
+		return andGate(input);
+	else if (type == NAND)
+		return !andGate(input);
+	else if (type == NOT)
+		return (!input[0]);
+	return false;
+}
+
+void calcWire(circuit_t &circuit, int32_t wire, std::map<int32_t,int32_t> &values) {
+	std::vector<bool> inputSignals;
+	//std::cout << wire;
+	//std::cout <<":";
+	for (int32_t x : circuit.at(wire).second)  {
+		inputSignals.push_back(values[x]);
+		//std::cout << values[x];
+	}
+	//std::cout << std::endl;
+
+	values[wire] = calcGate(circuit.at(wire).first,inputSignals);
+}
+
+void runSimulation(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t> &inSignals) {
+	std::map<int32_t,int32_t> values; // 0,1 albo -1 jak nie ma 
+	std::vector<bool> currInput(inSignals.size(),false); // poczatakowe wartosci inputu
+
+	for (int32_t inSignal : inSignals) 
+		values[inSignal] = -1;
+
+	for (int32_t n : order) 
+		values[n] = -1;
+
+	for (size_t i = 0; i < pow(2,inSignals.size()); i++) {
+		size_t j = 0;
+		for (std::set<int32_t>::iterator it = inSignals.begin(); it != inSignals.end(); it++) {
+			values[*it] = currInput[j];
+			j++;
+		}
+
+
+		for (int32_t n : order) 
+			calcWire(circuit,n,values);
+
+		for (std::map<int32_t,int32_t>::iterator it = values.begin(); it != values.end(); ++it) 
+			std::cout << it->second;
+		std::cout << std::endl;
+
+		nextCombination(currInput);
+	}
+}
+
+void visit(int32_t n, circuit_t &circuit, markingMap &mark, std::vector<int32_t> &order, std::set<int32_t> &inSignals, bool &dag) {
+	markingMap::iterator it = mark.find(n);
+	if (it == mark.end()) {
+		inSignals.insert(n);
 		return;
 	}
-	currCombination[index] = false;
-	genSignalCombinations(sc, currCombination, index + 1, n);
-	currCombination[index] = true;
-	genSignalCombinations(sc, currCombination, index + 1, n);
+	// sprawdza temporary mark
+	if (mark.at(n).first) {
+		dag = false;
+		return;
+	}
+	// sprawdza permament mark
+	if (mark.at(n).second) 
+		return;
+	
+	mark.at(n).first = true;
+	for (int32_t m : circuit.at(n).second) 
+		visit(m,circuit,mark,order,inSignals,dag);
+	
+	mark.at(n).first = false;
+	mark.at(n).second = true;
+
+	order.push_back(n);
+}
+
+void topoSort(circuit_t &circuit, std::vector<int32_t> &order, std::set<int32_t> &inSignals, bool &dag) {
+
+	markingMap mark;
+
+	for (circuit_t::iterator it = circuit.begin(); it != circuit.end(); ++it) 
+		mark[it->first] = std::make_pair(false,false);
+
+	for (markingMap::iterator it = mark.begin(); it != mark.end(); ++it) {
+		if (!mark.at(it->first).second)
+			visit(it->first,circuit, mark, order, inSignals, dag);
+	}
+
 }
 
 enum GateType GateTypeFromString(std::string s) {
@@ -70,6 +187,7 @@ bool goodGate(gate_t gate) {
 	}
 }
 
+
 void errorLine( int32_t lineNo, std::string line) {
 	std::cout << "Error in line " << lineNo << ": " << line << std::endl;
 }
@@ -107,9 +225,9 @@ GateType whatType(std::string line) {
  * Wczytuje sygnał z linii do obwodu (o ile linia jest poprawna składniowo).
  * Sparametryzowana kontekstem wywołania.
  */
-void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error, std::set<int32_t> &inSignals, std::set<int32_t> &outSignals) {
+void addSignal(circuit_t &circuit, std::string line, int32_t lineNo, bool& error) {
 	GateType type = whatType(line);
-	switch (type) {//! zamienić na if-else
+	switch (type) {
 		case NULLGATE:
 		{
 			errorLine(lineNo, line);
@@ -132,92 +250,60 @@ void addSignal(circuit_t circuit, std::string line, int32_t lineNo, bool& error,
 				errorMulOutput(lineNo, outSignal);
 				error = true;
 			}
-			outSignals.insert(outSignal);
 
 			int32_t inSignal;
 			while (str >> inSignal) {
 				gate.second.push_back(inSignal);
-				inSignals.insert(inSignal);
 			}
 			assert(goodGate(gate));
 
 			str >> std::ws;
 			assert(str.eof());
 			
+			//circuit.insert(std::pair<int32_t,gate_t>(outSignal,gate));
 			circuit[outSignal] = gate;
 
-			std::cout << "tak, wczytano " << gType << std::endl;//!//D
+			//std::cout << "tak, wczytano " << gType << std::endl;//!//D
 
 			break;
 		}
 	}
 }
 
-
 int main(void) {
 
 	bool error = false;
 	circuit_t circuit;	//struktura reprezentująca obwód
 
-	std::set<int32_t> inSignals; // przewody ktore wchodzą w jakąs bramke
-	std::set<int32_t> outSignals; // przewody które wychodzą z jakiejś bramki
+	std::unordered_set<int32_t> outSignals;
 
 	std::string line;
 	int32_t lineNo = 0;
 	while (std::getline(std::cin, line)) {
 		++lineNo;
-		addSignal(circuit, line, lineNo, error, inSignals, outSignals);	//error może być zmieniony
+		addSignal(circuit, line, lineNo, error);	//error może być zmieniony
 	}
 
-	// sygnały końcowe i poczatkowe z calego obwodu
-	std::set<int32_t> endSignals;
-	std::set<int32_t> begSignals;
-
-	// roznica teorio mnogosciowa zbiorow outSignals - inSignals daja przewody które wychodzą z całego obwodu
-	std::set_difference(outSignals.begin(),outSignals.end(),inSignals.begin(),inSignals.end(),
-						std::inserter(endSignals,endSignals.end()));
-
-	// roznica teorio mnogosciowa zbiorow  inSignals - outSignalsdaja przewody które wychodzą z całego obwodu
-	std::set_difference(inSignals.begin(),inSignals.end(),outSignals.begin(),outSignals.end(),
-						std::inserter(begSignals,begSignals.end()));
-
-
-	
-	/*
-	std::cout << "InSignals" << std::endl;
-	for (int32_t signal : inSingals) 
-		std::cout << signal << std::endl;
-
-	std::cout << "OutSignals" << std::endl;
-	for (int32_t signal : outSignals) 
-		std::cout << signal << std::endl;
 	//obwód utworzony (jako zmienna circuit)
-	
 	if (error) {
-		//obwód błędny, koniec programu
 		std::cout << "error" << std::endl;//!//D
 		return 0;
 	}
-	*/
-
-	/*poprawny obwód (jeśli chodzi o składnię danych
-	i to, że każdy sygnał może być maks. jednym wyjściem) */
-
-	//std::set<int32_t> inSignals;//do uzupełnienia podczas szukania cykli
-
 
 	
-	//w funkcji rekur. szukającej cykli:
-	/*
-	if(circuit.find(n) == circuit.end()) {
-		inSignals.insert(n);
-		return true;	//jest ok jeśli chodzi o cykle -- doszliśmy do sygnału wejściowego
+	std::set<int32_t> inSignals;	//sygnały wejsciowe do obwodu 
+	std::vector<int32_t> order;
+	bool dag = true;
+
+	topoSort(circuit,order,inSignals,dag);
+
+	if (!dag) {
+		std::cout << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
+		return 0;
 	}
-	else {
-		//rekurencja szukająca cykli:
-		coś_tam_coś(map[n])
-	}
-	*/
+
+	runSimulation(circuit,order,inSignals);
+
 
 	return 0;
 }
