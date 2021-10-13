@@ -192,11 +192,11 @@ bool goodGate(gate_t gate) {
 
 
 void errorLine( int32_t lineNo, std::string line) {
-	std::cout << "Error in line " << lineNo << ": " << line << std::endl;
+	std::cerr << "Error in line " << lineNo << ": " << line << std::endl;
 }
 
 void errorMulOutput(int32_t lineNo, int32_t signalNo) {
-	std::cout << "Error in line " << lineNo << ": "
+	std::cerr << "Error in line " << lineNo << ": "
 		<< "signal " << signalNo << " is assigned to multiple outputs." << std::endl;
 }
 
@@ -296,7 +296,7 @@ int main(void) {
 	topoSort(circuit,order,inSignals,dag);
 
 	if (!dag) {
-		std::cout << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
+		std::cerr << "Error: sequential logic analysis has not yet been implemented."<<std::endl;
 		return 0;
 	}
 
